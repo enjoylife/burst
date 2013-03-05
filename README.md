@@ -1,4 +1,3 @@
-burst
-=====
+Burst 
 
-Compact and cache friendly trie 
+Tri data structure
