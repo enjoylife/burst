@@ -120,10 +120,34 @@ func TestContainerDelete(t *testing.T) {
 	if check != true {
 		t.Error("Failed to remove last element")
 	}
-	fmt.Println("Before: ", c.records)
+	//fmt.Println("Before: ", c.records)
 	_, check = c.search([]byte{1, 1}, 0, _remove)
 	if check != true {
 		t.Error("Failed to remove first element")
+	}
+	//fmt.Println("After:  ", c.records)
+
+}
+
+func TestContainerUpdate(t *testing.T) {
+	var c container
+	var check bool
+	var u uintptr = 0
+	var u2 uintptr = 0
+
+	u = 10
+	u2 = 400
+	c.extend([]byte{1, 1}, u)
+	fmt.Println("Before: ", c.records)
+	u2, check = c.search([]byte{1, 1}, u2, _update)
+	if u2 != u || !check {
+		t.Error("Failed to update")
+	}
+	u = 256
+	fmt.Println("Before: ", c.records)
+	u2, check = c.search([]byte{1, 1, 1}, u, _update)
+	if u2 != u {
+		t.Error("Failed to update by extend")
 	}
 	fmt.Println("After:  ", c.records)
 
