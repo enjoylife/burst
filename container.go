@@ -10,9 +10,14 @@ var _ = fmt.Println
 
 type action byte
 
+//var _x interface{} = 0
+
 const (
-	ptrOffset int    = int(unsafe.Sizeof(uintptr(0)))
-	_remove   action = iota + 1
+	maxLen    int16 = 2<<14 - 1 //int16(^uint16(0) >> 1)
+	lenOffset int   = 2         // int(unsafe.Sizeof(int16(0)))
+	ptrOffset int   = int(unsafe.Sizeof(uintptr(0)))
+	//ptrOffset int    = int(unsafe.Sizeof(_x))
+	_remove action = iota + 1
 	_check
 	_update
 )
@@ -31,25 +36,21 @@ type container struct {
 // On _update returns the previously stored ptr
 func (c *container) search(data []byte, ptrIn uintptr, a action) (uintptr, bool) {
 
-	if len(data) == 0 {
-		return 0, false
-	}
-	// avoid data len which is larger then current records 
-	if len(c.records) <= 2 {
+	checkLen := int16(len(data))
+	if checkLen == 0 || checkLen > maxLen || checkLen > int16(len(c.records)) {
 		return 0, false
 	}
 
-	var count, dlen, dend, dstart int
+	var dend, dstart int
 
 	for { // linear scan
-		dlen, count = uleb128dec(c.records[dend:])
-		skip := count + ptrOffset + dlen
-		strRemain := c.records[dstart+count+ptrOffset : (dend + skip)]
-		//fmt.Println("MADIT")
+		dlen := uint16(c.records[dend]) | uint16(c.records[dend+1])<<8
+		skip := lenOffset + ptrOffset + int(dlen)
+		strRemain := c.records[dstart+lenOffset+ptrOffset : (dend + skip)]
 		dtest := bytes.Equal(strRemain, data)
 		// search success
 		if dtest {
-			ptrBuff := c.records[dstart+count : dstart+count+ptrOffset]
+			ptrBuff := c.records[dstart+lenOffset : dstart+lenOffset+ptrOffset]
 			ptr := getPtr(ptrBuff)
 			switch a {
 			case _check:
@@ -88,18 +89,20 @@ func (c *container) search(data []byte, ptrIn uintptr, a action) (uintptr, bool)
 
 // extend at the end of the slice return false only if bytes to be inserted are longer then capable
 func (c *container) extend(byteRemaining []byte, ptr uintptr) bool {
-	var dlen = len(byteRemaining)
-	// max size is 2 bytes
-	if byteRemaining == nil {
+
+	checkLen := int16(len(byteRemaining))
+	if checkLen == 0 || checkLen > maxLen {
 		return false
 	}
+	var bufferLen [2]byte
+	bufferLen[0] = byte(checkLen)
+	bufferLen[1] = byte(checkLen >> 8)
 
-	var bufferLen = make([]byte, 10)
 	var bufferPtr = make([]byte, ptrOffset)
-	var count = uleb128enc(bufferLen, dlen)
 	insertPtr(bufferPtr, ptr)
 
-	c.records = append(c.records, bufferLen[0:count]...)
+	c.records = append(c.records, bufferLen[0])
+	c.records = append(c.records, bufferLen[1])
 	c.records = append(c.records, bufferPtr...)
 	c.records = append(c.records, byteRemaining...)
 	return true
